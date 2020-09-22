@@ -117,7 +117,7 @@ protected:
     explicit _any(char* buffer) noexcept : _buffer(buffer) {}
 
     ~_any(void) noexcept { reset(); }
-    
+
     void copy_data(const _any& rhs)
     {
         reset();
@@ -151,19 +151,19 @@ protected:
 }
 
 template <class T>
-inline T* any_cast(internal::_any* target) noexcept
+T* any_cast(internal::_any* target) noexcept
 {
     return (target ? target->_cast<T>() : nullptr);
 }
 
 template <class T>
-inline const T* any_cast(const internal::_any* target) noexcept
+const T* any_cast(const internal::_any* target) noexcept
 {
     return (target ? target->_cast<T>() : nullptr);
 }
 
 template <class T>
-inline T any_cast(internal::_any& target)
+T any_cast(internal::_any& target)
 {
     using U = remove_cvref_t<T>;
     static_assert(is_constructible<T, const U&>::value, "T is not constructible");
@@ -171,7 +171,7 @@ inline T any_cast(internal::_any& target)
 }
 
 template <class T>
-inline T any_cast(const internal::_any& target)
+T any_cast(const internal::_any& target)
 {
     using U = remove_cvref_t<T>;
     static_assert(is_constructible<T, U&>::value, "T is not constructible");
@@ -179,7 +179,7 @@ inline T any_cast(const internal::_any& target)
 }
 
 template <class T>
-inline T any_cast(internal::_any&& target)
+T any_cast(internal::_any&& target)
 {
     using U = remove_cvref_t<T>;
     static_assert(is_constructible<T, U>::value, "T is not constructible");
@@ -281,7 +281,7 @@ public:
 };
 
 template <size_t SIZE, size_t ALIGN>
-inline void swap(any<SIZE, ALIGN>& lhs, any<SIZE, ALIGN>& rhs) noexcept
+void swap(any<SIZE, ALIGN>& lhs, any<SIZE, ALIGN>& rhs) noexcept
 {
     lhs.swap(rhs);
 }
@@ -402,7 +402,7 @@ public:
 };
 
 template <class R, class... Args, size_t SIZE, size_t ALIGN>
-inline void swap(function<R(Args...), SIZE, ALIGN>& lhs, function<R(Args...), SIZE, ALIGN>& rhs) noexcept
+void swap(function<R(Args...), SIZE, ALIGN>& lhs, function<R(Args...), SIZE, ALIGN>& rhs) noexcept
 {
     lhs.swap(rhs);
 }
@@ -419,13 +419,13 @@ struct fitted_any
 };
 
 template <size_t SIZE, size_t ALIGN, class T, class... Args>
-inline any<SIZE, ALIGN> make_any(Args&&... args)
+any<SIZE, ALIGN> make_any(Args&&... args)
 {
     return (any<SIZE, ALIGN>(in_place_type_v<T>::value, forward<Args>(args)...));
 }
 
 template <class T, class... Args>
-inline typename fitted_any<T>::type make_fitted_any(Args&&... args)
+typename fitted_any<T>::type make_fitted_any(Args&&... args)
 {
     return (typename fitted_any<T>::type(in_place_type_v<T>::value, forward<Args>(args)...));
 }

@@ -219,10 +219,6 @@ void test_any(void)
         std::cout << a(5) << std::endl;
         std::cout << b(5) << std::endl;
     }
-    {
-        C c;
-        // lib::fitted_any<C>::type cc{c};
-    }
 }
 using lib::variant;
 

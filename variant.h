@@ -79,8 +79,36 @@ struct variant_alternative<Index, const volatile Variants> :
 namespace internal
 {
 template <class Visitor, class... Variants>
-using _visit_result_t =
-    decltype(lib::declval<Visitor>()(lib::declval<variant_alternative_t<0, remove_cvref_t<Variants>>>()...));
+using _visit_result_t = decltype(declval<Visitor>()(declval<variant_alternative_t<0, remove_cvref_t<Variants>>>()...));
+
+struct _visit_copier
+{
+    void* const dst;
+    template <class T>
+    void operator()(const T& src) const
+    {
+        new (dst) decay_t<T>(src);
+    }
+};
+struct _visit_mover
+{
+    void* const dst;
+    template <class T>
+    void operator()(T&& src) const
+    {
+        new (dst) decay_t<T>(move(src));
+    }
+};
+struct _visit_destructor
+{
+    template <class T>
+    void operator()(T&& dst) const
+    {
+        using Decayed = decay_t<T>;
+        dst.~Decayed();
+    }
+};
+constexpr _visit_destructor _visit_destructor_v;
 }
 
 template <class Visitor, class... Variants>
@@ -91,73 +119,6 @@ class variant
 {
     static_assert(!disjunction<is_array<Ts>...>::value, "Array cannot be used.");
     static_assert(conjunction<is_object<Ts>...>::value, "T params must be object.");
-
-private:
-    template <size_t Index, size_t N>
-    struct copier
-    {
-        static void copy(const variant& src, variant& dst)
-        {
-            using type = variant_alternative_t<Index, variant>;
-            if (src._current_id == Index)
-            {
-                new (dst._buffer) type(*static_cast<const type*>(src._get_buffer()));
-            }
-            else
-            {
-                copier<Index + 1, N>::copy(src, dst);
-            }
-        }
-    };
-    template <size_t N>
-    struct copier<N, N>
-    {
-        static void copy(const variant& src, variant& dst) {}
-    };
-
-    template <size_t Index, size_t N>
-    struct mover
-    {
-        static void move(variant& src, variant& dst)
-        {
-            using type = variant_alternative_t<Index, variant>;
-            if (src._current_id == Index)
-            {
-                new (dst._buffer) type(::lib::move(*static_cast<type*>(src._get_buffer())));
-            }
-            else
-            {
-                mover<Index + 1, N>::move(src, dst);
-            }
-        }
-    };
-    template <size_t N>
-    struct mover<N, N>
-    {
-        static void move(variant& src, variant& dst) {}
-    };
-
-    template <size_t Index, size_t N>
-    struct destroyer
-    {
-        static void destroy(variant& target)
-        {
-            using type = variant_alternative_t<Index, variant>;
-            if (target._current_id == Index)
-            {
-                static_cast<type*>(target._get_buffer())->~type();
-            }
-            else
-            {
-                destroyer<Index + 1, N>::destroy(target);
-            }
-        }
-    };
-    template <size_t N>
-    struct destroyer<N, N>
-    {
-        static void destroy(variant& target) {}
-    };
 
 public:
     template <class T>
@@ -176,9 +137,9 @@ public:
     }
     variant(const variant& rhs) : _current_id(rhs._current_id)
     {
-        copier<0, variant_size<variant>::value>::copy(rhs, *this);
+        copy(rhs);
     }
-    variant(variant&& rhs) : _current_id(rhs._current_id) { mover<0, variant_size<variant>::value>::move(rhs, *this); }
+    variant(variant&& rhs) : _current_id(rhs._current_id) { move(::lib::move(rhs)); }
 
     template <class T, disable_if_t<disjunction<is_template_of<variant, decay_t<T>>>::value>* = nullptr>
     variant(T&& data) : _current_id(type_to_index<remove_cvref_t<T>>::value)
@@ -190,14 +151,14 @@ public:
     {
         destroy();
         _current_id = rhs._current_id;
-        copier<0, variant_size<variant>::value>::copy(rhs, *this);
+        copy(rhs);
         return (*this);
     }
     variant& operator=(variant&& rhs)
     {
         destroy();
         _current_id = rhs._current_id;
-        mover<0, variant_size<variant>::value>::move(rhs, *this);
+        move(::lib::move(rhs));
         return (*this);
     }
     template <class T, disable_if_t<disjunction<is_template_of<variant, decay_t<T>>>::value>* = nullptr>
@@ -217,7 +178,15 @@ public:
     const void* _get_buffer(void) const { return (_buffer); }
 
 private:
-    void destroy(void) { destroyer<0, variant_size<variant>::value>::destroy(*this); }
+    void copy(const variant& src)
+    {
+        visit(internal::_visit_copier{_buffer}, src);
+    }
+    void move(variant&& src)
+    {
+        visit(internal::_visit_mover{_buffer}, src);
+    }
+    void destroy(void) { visit(internal::_visit_destructor_v, *this); }
 };
 
 template <size_t Index, class... Ts>
@@ -304,51 +273,32 @@ constexpr const T&& get(const variant<Ts...>&& v)
 
 namespace internal
 {
-template <size_t Index, size_t N, class = void>
-struct _visit_impl
+template <class R, class Visitor, class Variants, size_t Index>
+static R _visit_vtable(Visitor&& vis, Variants&& vars)
 {
-    template <class R, class Visitor, class Variants>
-    static R _visit(Visitor&& vis, Variants&& vars)
-    {
-        static_assert(_type_duple_count<variant_alternative_t<Index, remove_cvref_t<Variants>>,
-                                        remove_cvref_t<Variants>>::value == 1,
-                      "variant tparam must have one T.");
-        if (vars.index() == Index)
-        {
-            return (forward<Visitor>(vis)(get<Index>(forward<Variants>(vars))));
-        }
-        return (_visit_impl<Index + 1, N>::template _visit<R>(vis, vars));
-    }
-};
+    return (forward<Visitor>(vis)(get<Index>(forward<Variants>(vars))));
+}
 
-template <size_t Index, size_t N>
-struct _visit_impl<Index, N, enable_if_t<Index == N - 1>>
+template <class R, class Visitor, class Variants, size_t... Indices>
+static R _visit_impl(Visitor&& vis, Variants&& vars, index_sequence<Indices...>)
 {
-    template <class R, class Visitor, class Variants>
-    static R _visit(Visitor&& vis, Variants&& vars)
-    {
-        static_assert(_type_duple_count<variant_alternative_t<Index, remove_cvref_t<Variants>>,
-                                        remove_cvref_t<Variants>>::value == 1,
-                      "variant tparam must have one T.");
-        return (forward<Visitor>(vis)(get<Index>(forward<Variants>(vars))));
-    }
-};
+    constexpr R (*vtable[])(Visitor&&, Variants &&) = {_visit_vtable<R, Visitor, Variants, Indices>...};
+    return (vtable[vars.index()](forward<Visitor>(vis), forward<Variants>(vars)));
+}
 }
 
 template <class Visitor, class... Variants>
-inline internal::_visit_result_t<Visitor, Variants...> visit(Visitor&& vis, Variants&&... vars)
+internal::_visit_result_t<Visitor, Variants...> visit(Visitor&& vis, Variants&&... vars)
 {
     using R = internal::_visit_result_t<Visitor, Variants...>;
-    static_assert(conjunction<is_template_of<variant, remove_cvref_t<Variants>>...>::value, "Vars must be variant.");
-    return internal::_visit_impl<0, variant_size<remove_cvref_t<Variants>>::value...>::template _visit<R>(
-        forward<Visitor>(vis), forward<Variants>(vars)...);
+    return (internal::_visit_impl<R>(forward<Visitor>(vis), forward<Variants>(vars)...,
+                              make_index_sequence<variant_size<remove_cvref_t<Variants>>::value>{}...));
 }
 
 template <class R, class Visitor, class... Variants>
-inline R visit(Visitor&& vis, Variants&&... vars)
+R visit(Visitor&& vis, Variants&&... vars)
 {
-    static_assert(conjunction<is_template_of<variant, remove_cvref_t<Variants>>...>::value, "Vars must be variant.");
-    return internal::_visit_impl<0, variant_size<remove_cvref_t<Variants>>::value...>::template _visit<R>(
-        forward<Visitor>(vis), forward<Variants>(vars)...);
+    return (internal::_visit_impl<R>(forward<Visitor>(vis), forward<Variants>(vars)...,
+                              make_index_sequence<variant_size<remove_cvref_t<Variants>>::value>{}...));
 }
 }
