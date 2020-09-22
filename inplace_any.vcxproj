@@ -142,11 +142,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="inplace_any.cpp" />
+    <ClCompile Include="any.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="inplace_any.h" />
+    <ClInclude Include="any.h" />
     <ClInclude Include="rtw.h" />
+    <ClInclude Include="variant.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
