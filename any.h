@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "type_traits.h"
+#include "new.h"
 
 namespace lib
 {

@@ -5,11 +5,20 @@ namespace lib
 #ifdef _WIN32
 #ifdef _WIN64
 using size_t = unsigned long long;
+using ptrdiff_t = long long;
+using intptr_t = long long;
+using uintptr_t = unsigned long long;
 #else
-using size_t = unsigned long;
+using size_t = unsigned int;
+using ptrdiff_t = int;
+using intptr_t = int;
+using uintptr_t = unsigned long;
 #endif
 #elif defined __GNUC__
 using size_t = unsigned long;
+using ptrdiff_t = long;
+using intptr_t = long;
+using uintptr_t = unsigned long;
 #else
 #error not implemented
 #endif
