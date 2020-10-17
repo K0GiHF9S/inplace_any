@@ -146,7 +146,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="any.h" />
-    <ClInclude Include="rtw.h" />
+    <ClInclude Include="new.h" />
+    <ClInclude Include="type_traits.h" />
     <ClInclude Include="variant.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

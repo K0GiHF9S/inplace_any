@@ -237,14 +237,61 @@ struct visitor
     }
 
     template <class T>
-    int operator()(T&&){
+    int operator()(T&&)
+    {
         std::cout << "visited" << std::endl;
         return (3);
     }
 };
 
+#define HAS_METHOD(func_name)                                                        \
+    template <class T>                                                               \
+    struct has_method_##func_name                                                    \
+    {                                                                                \
+        static lib::false_type check(...);                                           \
+        template <class U>                                                           \
+        static auto           check(U) -> decltype(&U::func_name, lib::true_type()); \
+        static constexpr bool value = decltype(check(lib::declval<T>()))::value;     \
+    }
+
+HAS_METHOD(call);
+
+struct caller
+{
+    void call(void) { std::cout << "call own" << std::endl; }
+    int  a;
+};
+
+struct non_caller
+{
+};
+inline void call(const non_caller&) { std::cout << "called" << std::endl; }
+
+struct special_visitor
+{
+    template <class T>
+    auto operator()(T&& t) -> lib::enable_if_t<has_method_call<T>::value, decltype(t.call())>
+    {
+        return t.call();
+    }
+
+    template <class T>
+    auto operator()(T&& t) -> lib::disable_if_t<has_method_call<T>::value, decltype(call(t))>
+    {
+        return call(t);
+    }
+};
+
 void test_variant(void)
 {
+    auto                             aa = static_cast<decltype(&caller::call)>(&caller::call);
+    constexpr bool c1 = has_method_call<caller>::value;
+    constexpr bool c2 = has_method_call<non_caller>::value;
+    lib::variant<caller, non_caller> vcaller;
+    lib::visit(special_visitor{}, vcaller);
+    vcaller = non_caller{};
+    lib::visit(special_visitor{}, vcaller);
+
     lib::variant<int, A, int> v0;
     lib::variant<int, A>      v1{1};
     lib::variant<int, A>      v2{A{}};
@@ -287,6 +334,8 @@ void test_variant(void)
 
     // auto b = []{};
     // lib::variant<decltype(b)> v4;
+
+
 }
 int main()
 {

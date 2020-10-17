@@ -373,10 +373,6 @@ public:
         return (*this);
     }
 
-    R operator()(Args&&... args) { return (this->_derived(_func, forward<Args>(args)...)); }
-
-    explicit operator bool(void) const noexcept { return (this->_derived); }
-
     void swap(function& rhs)
     {
         if (*this && rhs)
